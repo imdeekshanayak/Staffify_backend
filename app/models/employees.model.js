@@ -5,7 +5,12 @@ const employeeSchema = new mongoose.Schema({
         type:String,
         primaryKey:true
     },
-    fullName:{
+    userId:{
+        type:String,
+        primaryKey:true
+    },
+    
+    name:{
         type:String,
         
     },
@@ -21,7 +26,7 @@ const employeeSchema = new mongoose.Schema({
         type:String,
         
     },
-    fatherName:{
+    name:{
         type:String,
         
     },
@@ -37,10 +42,7 @@ const employeeSchema = new mongoose.Schema({
         type:String,
         
     },
-    employeeType:{
-        type:String,
-        
-    },
+    
     dateOfJoining:{
         type:String,
         
@@ -49,17 +51,22 @@ const employeeSchema = new mongoose.Schema({
         type:String,
         
     },
-    companyBranch:{
-        type:String,
-        
-    },totalSalary:{
+    totalSalary:{
         type:String,
         
     },department:{
         type:String,
         
-    },officialEmail:{
+    },email:{
         type:String,
+        
+    },
+    managerId:{
+        type:String,
+        
+    },
+    isActive:{
+        type:Boolean,
         
     },
 },
