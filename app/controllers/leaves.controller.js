@@ -1,37 +1,40 @@
 const express = require("express");
 const apiRoutes = express.Router();
 const Leaves = require("../models/leave.model");
+const LeaveBalance = require("../models/employeeLeaveBalance.model");
 
 module.exports = function (app) {
 
-  // ✅ CREATE LEAVE
-  apiRoutes.post("/createLeave", async (req, res) => {
+  /* =====================================================
+     APPLY LEAVE
+  ===================================================== */
+  apiRoutes.post("/applyLeave", async (req, res) => {
     try {
       const {
+        employeeId,
         employeeName,
         leaveType,
         fromDate,
         toDate,
         reason,
-        approvedBy
       } = req.body;
 
-       const leaveId = "ENQ-" + Math.floor(1000 + Math.random() * 9000);
-
+      const leaveId = "LV-" + Date.now();
 
       const leave = await Leaves.create({
         leaveId,
+        employeeId,
         employeeName,
         leaveType,
         fromDate,
         toDate,
         reason,
-        approvedBy
+        status: "Pending",
       });
 
       return res.status(201).json({
         message: "Leave applied successfully",
-        data: leave
+        data: leave,
       });
 
     } catch (error) {
@@ -39,14 +42,14 @@ module.exports = function (app) {
     }
   });
 
-  // ✅ GET ALL LEAVES
+ 
   apiRoutes.get("/getLeaves", async (req, res) => {
     try {
-      const leaves = await Leaves.find({});
+      const leaves = await Leaves.find({}).sort({ createdAt: -1 });
 
       return res.status(200).json({
         message: "Leaves fetched successfully",
-        data: leaves
+        data: leaves,
       });
 
     } catch (error) {
@@ -54,60 +57,80 @@ module.exports = function (app) {
     }
   });
 
-  // ✅ GET LEAVE BY ID
-  apiRoutes.get("/getLeave/:id", async (req, res) => {
-    try {
-      const leave = await Leaves.findById(req.params.id);
-
-      if (!leave) {
-        return res.status(404).json({
-          message: "Leave not found"
-        });
-      }
-
-      return res.status(200).json({
-        data: leave
-      });
-
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ✅ UPDATE LEAVE (status / dates / reason)
+  
   apiRoutes.post("/updateLeave", async (req, res) => {
     try {
-      const {
-        leaveId,
-        status,
-        leaveType,
-        fromDate,
-        toDate,
-        reason,
-        approvedBy
-      } = req.body;
+      const { leaveId, status, approvedBy } = req.body;
 
-      const leave = await Leaves.findById(leaveId);
+      const leave = await Leaves.findOne({ leaveId });
 
       if (!leave) {
         return res.status(404).json({
-          message: "Leave not found"
+          message: "Leave not found",
         });
       }
 
-      const updates = { status, leaveType, fromDate, toDate, reason,approvedBy };
+      // Prevent double approval
+      if (leave.status === "Approved") {
+        return res.status(400).json({
+          message: "Leave already approved",
+        });
+      }
 
-      Object.keys(updates).forEach((key) => {
-        if (updates[key] !== undefined) {
-          leave[key] = updates[key];
-        }
-      });
-
+      leave.status = status;
+      leave.approvedBy = approvedBy;
       await leave.save();
+
+      /* 🔥 If Approved → Deduct Balance */
+      if (status === "Approved") {
+
+        const from = new Date(leave.fromDate);
+        const to = new Date(leave.toDate);
+
+        const diffDays =
+          Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
+
+        const year = from.getFullYear();
+
+        const balance = await LeaveBalance.findOne({
+          employeeId: leave.employeeId,
+          year,
+        });
+
+        if (!balance) {
+          return res.status(404).json({
+            message: "Leave balance record not found",
+          });
+        }
+
+        const leaveTypeData =
+          balance.leaveAllocation[leave.leaveType];
+
+        if (!leaveTypeData) {
+          return res.status(400).json({
+            message: "Invalid leave type",
+          });
+        }
+
+        // Check available balance
+        if (
+          leaveTypeData.used + diffDays >
+          leaveTypeData.totalAllocated
+        ) {
+          return res.status(400).json({
+            message: "Insufficient leave balance",
+          });
+        }
+
+        leaveTypeData.used += diffDays;
+
+        balance.lastUpdated = new Date();
+        await balance.save();
+      }
 
       return res.status(200).json({
         message: "Leave updated successfully",
-        data: leave
+        data: leave,
       });
 
     } catch (error) {
@@ -115,21 +138,21 @@ module.exports = function (app) {
     }
   });
 
-  // ✅ DELETE LEAVE
+  
   apiRoutes.post("/deleteLeave", async (req, res) => {
     try {
       const { leaveId } = req.body;
 
-      const leave = await Leaves.findByIdAndDelete(leaveId);
+      const leave = await Leaves.findOneAndDelete({ leaveId });
 
       if (!leave) {
         return res.status(404).json({
-          message: "Leave not found"
+          message: "Leave not found",
         });
       }
 
       return res.status(200).json({
-        message: "Leave deleted successfully"
+        message: "Leave deleted successfully",
       });
 
     } catch (error) {
