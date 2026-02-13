@@ -5,9 +5,7 @@ const LeaveBalance = require("../models/employeeLeaveBalance.model");
 
 module.exports = function (app) {
 
-  /* =====================================================
-     APPLY LEAVE
-  ===================================================== */
+  
   apiRoutes.post("/applyLeave", async (req, res) => {
     try {
       const {
