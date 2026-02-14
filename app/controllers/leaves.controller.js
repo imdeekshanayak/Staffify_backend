@@ -158,5 +158,23 @@ module.exports = function (app) {
     }
   });
 
+
+   apiRoutes.post("/getLeaveBalance", async (req, res) => {
+    try {
+      const { employeeId } = req.body;
+
+     
+      const leavebalane = await LeaveBalance.find({employeeId});
+
+      return res.status(201).json({
+        message: "LeaveBalance fetched successfully",
+        data: leavebalane,
+      });
+
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   app.use("/", apiRoutes);
 };
