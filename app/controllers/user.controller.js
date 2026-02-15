@@ -1,216 +1,186 @@
 const express = require("express");
 const apiRoutes = express.Router();
 const User = require("../models/user.model");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
+ 
 
-const JWT_SECRET = "staffify_secret_key"; // move to .env in production
-const otpStore = {};
-
-module.exports = function (app) {
-
-  apiRoutes.post("/register", async (req, res) => {
+module.exports = function(app){
+  
+ apiRoutes.post("/register", async (req, res) => {
+  
+    const { name, email, password } = req.body;
     try {
-      const { name, email, password, role } = req.body;
 
-      if (!name || !email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "All fields are required"
-        });
-      }
 
+        const userId = "USR-" + Math.floor(1000 + Math.random() * 9000);
       const existingUser = await User.findOne({ email });
       if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: "User already registered"
-        });
+        return res.status(400).send({ msg: "User already registered." });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const userId = "USR-" + Math.floor(1000 + Math.random() * 9000);
-
       const newUser = await User.create({
-        userId,
-        name,
-        email,
-        password: hashedPassword,
-        role: role || "employee",
-        isActive: true
+       userId, name, email, password
       });
-
-      return res.status(201).json({
-        success: true,
-        message: "User registered successfully",
-        data: newUser
-      });
-
+      res
+        .status(201)
+        .send({ msg: "User registered successfully.", user: newUser });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message
-      });
+      res
+        .status(500)
+        .send({ msg: "Error registering user.", error: err.message });
     }
   });
 
-  
   apiRoutes.post("/login", async (req, res) => {
-  try {
     const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid credentials"
-      });
-    }
-
-    // ✅ compare hashed password properly
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid credentials"
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Login successful",
-      user: {
-        userId: user.userId,
-        name: user.name,
-        email: user.email,
-        role: user.role
+    try {
+         const userId = "USR-" + Math.floor(1000 + Math.random() * 9000);
+      const user = await User.findOne({ email});
+      if (!user || user.password !== password) {
+        return res.status(400).send({ msg: "Invalid credentials." });
       }
-    });
 
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
-  }
-});
+
+      res.status(200).send({ msg: "Login successful.", email,userId:user.userId });
+    } catch (err) {
+      res.status(500).send({ msg: "Error logging in.", error: err.message });
+    }
+  });
 
   apiRoutes.post("/forget-password", async (req, res) => {
+    const { email } = req.body;
+    console.log("Body for Forget-Password::::", req.body);
     try {
-      const { email } = req.body;
-
-      const user = await User.findOne({ email });
-
+      const user = await User.findOne({ email});
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found"
-        });
+        console.log(`User not found for emailOrUsername: ${email}`);
+        return res.status(404).send({ msg: "User not found.", status: "false" });
       }
-
       const otp = crypto.randomInt(100000, 999999);
-      otpStore[email] = otp;
+      otpStore[email] = otp; // Store OTP temporarily
 
-      console.log(`OTP for ${email}: ${otp}`);
+      console.log(
+        `Generated OTP: ${otp} for email: ${email}`
+      );
 
-      // In production → send email here
+      await sendEmail(
+        email,
+        "Password Reset OTP",
+        `Your OTP for password reset is: ${otp}`
+      );
 
-      return res.status(200).json({
-        success: true,
-        message: "OTP generated successfully"
-      });
-
+      res.status(200).send({ msg: "OTP sent to your email.", status: "true" });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message
-      });
+      console.error(`Error sending OTP to ${email}:`, err.message);
+      res.status(500).send({ msg: "Error sending OTP.", error: err.message });
     }
   });
 
   apiRoutes.post("/verify-otp", async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
     try {
-      const { email, otp, newPassword } = req.body;
-
-      if (otpStore[email] !== parseInt(otp)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid OTP"
-        });
+      const storedOtp = otpStore[email];
+      if (!storedOtp || storedOtp !== parseInt(otp)) {
+        return res.status(400).send({ msg: "Invalid or expired OTP." });
       }
 
-      const user = await User.findOne({ email });
-
+      const user = await User.findOne({ email});
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found"
-        });
+        return res.status(404).send({ msg: "User not found." });
       }
 
-      user.password = await bcrypt.hash(newPassword, 10);
+      user.password = newPassword;
       await user.save();
 
-      delete otpStore[email];
+      delete otpStore[emailOrUsername];
 
-      return res.status(200).json({
-        success: true,
-        message: "Password updated successfully"
-      });
-
+      res.status(200).send({ msg: "Password updated successfully." });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message
-      });
+      res
+        .status(500)
+        .send({ msg: "Error updating password.", error: err.message });
     }
   });
+
+  // apiRoutes.post('/adminLogin', async (req, res) => {
+  //     const { email, phone, password, role } = req.body;
+
+  //     try {
+  //         // Find user based on email or phone
+  //         const user = await User.findOne({
+  //             $or: [
+  //                 { email: email },
+  //                 { phone: phone }
+  //             ]
+  //         });
+
+  //         // Check if user exists
+  //         if (!user) {
+  //             return res.status(400).send({ msg: 'User Not Found.' });
+  //         }
+
+  //         // Check if the password matches (assuming password is not hashed)
+  //         if (user.password !== password) {
+  //             return res.status(400).send({ msg: 'Invalid Password.' });
+  //         }
+
+  //         // Check if the role matches and if the user is an admin
+  //         if (user.role !== 'admin' || role !== 'admin') {
+  //             return res.status(403).send({ msg: 'You are not an admin.' });
+  //         }
+
+  //         // Login successful
+  //         res.status(200).send({ msg: 'Login successful.', email: user.email });
+  //     } catch (err) {
+  //         res.status(500).send({ msg: 'Error logging in.', error: err.message, err });
+  //     }
+  // });
 
   apiRoutes.post("/adminLogin", async (req, res) => {
+    const { email, phone, password, role } = req.body;
+   
     try {
-      const { email, password } = req.body;
-
-      const user = await User.findOne({ email });
-
-      if (!user || user.role !== "admin") {
-        return res.status(403).json({
-          success: false,
-          message: "Admin not found"
-        });
+      // Define query condition based on input
+      let queryCondition = {};
+      if (email) {
+        queryCondition.emailOrUsername = email;
+      } else if (phone) {
+        queryCondition.phone = phone;
+      } else {
+        return res.status(400).send({ msg: "Email or phone is required." });
       }
 
-      const isMatch = await bcrypt.compare(password, user.password);
+      // Find user based on the specific query condition
+      const user = await User.findOne(queryCondition);
 
-      if (!isMatch) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid password"
-        });
+      // Check if user exists
+      if (!user) {
+        return res.status(400).send({ msg: "User Not Found." });
       }
 
-      const token = jwt.sign(
-        { userId: user.userId, role: user.role },
-        JWT_SECRET,
-        { expiresIn: "1d" }
-      );
+      // Check if the password matches
+      if (user.password !== password) {
+        return res.status(400).send({ msg: "Invalid Password." });
+      }
 
-      return res.status(200).json({
-        success: true,
-        message: "Admin login successful",
-        token
-      });
+      // Check if the role matches and if the user is an admin
+      if (user.role !== "admin" || role !== "admin") {
+        return res.status(403).send({ msg: "You are not an admin." });
+      }
 
+      // Login successful
+      res
+        .status(200)
+        .send({
+          msg: "Login successful.",
+          email: user.email,
+        });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message
-      });
+      res.status(500).send({ msg: "Error logging in.", error: err.message });
     }
   });
 
-  app.use("/", apiRoutes);
-};
+
+    app.use("/",apiRoutes);
+   
+}
