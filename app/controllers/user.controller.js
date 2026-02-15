@@ -40,7 +40,7 @@ module.exports = function(app){
       }
 
 
-      res.status(200).send({ msg: "Login successful.", email,userId:user.userId });
+      res.status(200).send({ msg: "Login successful.", email,userId:user.userId ,user:user.name});
     } catch (err) {
       res.status(500).send({ msg: "Error logging in.", error: err.message });
     }
